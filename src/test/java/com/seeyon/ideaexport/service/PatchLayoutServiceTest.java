@@ -1,0 +1,223 @@
+package com.seeyon.ideaexport.service;
+
+import com.seeyon.ideaexport.exception.ExportException;
+import com.seeyon.ideaexport.model.CompileMode;
+import com.seeyon.ideaexport.model.CompileResult;
+import com.seeyon.ideaexport.model.ExportEntry;
+import com.seeyon.ideaexport.model.ExportMode;
+import com.seeyon.ideaexport.model.ExportRequest;
+import com.seeyon.ideaexport.model.ModulePackagingInfo;
+import com.seeyon.ideaexport.model.SelectedItem;
+import com.seeyon.ideaexport.model.SourceType;
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+/**
+ * 导出路径规划测试，验证普通补丁、bug jar 和关闭编译后的路径映射规则。
+ *
+ * @Author by AI.Coding
+ * @Date 2026-04-11
+ */
+class PatchLayoutServiceTest {
+
+    private final PatchLayoutService patchLayoutService = new PatchLayoutService();
+
+    /**
+     * 验证 Java 类文件会映射到 classes 目录。
+     *
+     * @throws ExportException 规划失败
+     */
+    @Test
+    void shouldMapJavaSourceToClassesDirectory() throws ExportException {
+        SelectedItem selectedItem = new SelectedItem(
+                "comi-biz",
+                Path.of("/project/comi-biz"),
+                Path.of("/project/comi-biz/src/main/java/demo/Test.java"),
+                Path.of("demo/Test.class").toString(),
+                SourceType.JAVA_SOURCE
+        );
+        ExportRequest request = new ExportRequest(
+                ExportMode.STANDARD_PATCH,
+                CompileMode.MAVEN_CURRENT_MODULE,
+                false,
+                Path.of("/export"),
+                List.of(selectedItem)
+        );
+        CompileResult compileResult = CompileResult.success(
+                List.of("comi-biz"),
+                Map.of("comi-biz", Path.of("/project/comi-biz/target/classes"))
+        );
+
+        List<ExportEntry> entries = patchLayoutService.plan(request, compileResult, Map.of());
+
+        // 普通 Java 类导出必须进入 classes，才能满足 Seeyon 补丁装载规则。
+        assertEquals(Path.of("/export/classes/demo/Test.class"), entries.get(0).outputPath());
+        assertEquals(Path.of("/project/comi-biz/target/classes/demo/Test.class"), entries.get(0).sourcePath());
+    }
+
+    /**
+     * 验证 webapp 资源会映射到 seeyon 目录。
+     *
+     * @throws ExportException 规划失败
+     */
+    @Test
+    void shouldMapWebResourceToSeeyonDirectory() throws ExportException {
+        SelectedItem selectedItem = new SelectedItem(
+                "cap-agent",
+                Path.of("/project/cap-agent"),
+                Path.of("/project/cap-agent/webapp/js/app.js"),
+                Path.of("js/app.js").toString(),
+                SourceType.WEB_RESOURCE
+        );
+        ExportRequest request = new ExportRequest(
+                ExportMode.STANDARD_PATCH,
+                CompileMode.MAVEN_CURRENT_MODULE,
+                false,
+                Path.of("/export"),
+                List.of(selectedItem)
+        );
+        CompileResult compileResult = CompileResult.success(List.of("cap-agent"), Map.of());
+
+        List<ExportEntry> entries = patchLayoutService.plan(request, compileResult, Map.of());
+
+        // webapp 资源必须映射到 /seeyon，不能混入 classes。
+        assertEquals(Path.of("/export/seeyon/js/app.js"), entries.get(0).outputPath());
+        assertEquals(Path.of("/project/cap-agent/webapp/js/app.js"), entries.get(0).sourcePath());
+    }
+
+    /**
+     * 验证 bug jar 模式会按 jar 文件夹名规划路径。
+     *
+     * @throws ExportException 规划失败
+     */
+    @Test
+    void shouldMapBugJarToJarFolderClassesDirectory() throws ExportException {
+        SelectedItem selectedItem = new SelectedItem(
+                "comi-biz",
+                Path.of("/project/comi-biz"),
+                Path.of("/project/comi-biz/src/main/java/demo/Test.java"),
+                Path.of("demo/Test.class").toString(),
+                SourceType.JAVA_SOURCE
+        );
+        ExportRequest request = new ExportRequest(
+                ExportMode.BUG_JAR,
+                CompileMode.MAVEN_CURRENT_MODULE,
+                false,
+                Path.of("/export"),
+                List.of(selectedItem)
+        );
+        CompileResult compileResult = CompileResult.success(
+                List.of("comi-biz"),
+                Map.of("comi-biz", Path.of("/project/comi-biz/target/classes"))
+        );
+        Map<String, ModulePackagingInfo> packagingInfo = Map.of(
+                "comi-biz",
+                new ModulePackagingInfo("comi-biz", "seeyon-comi-biz", Path.of("/project/comi-biz/target/classes"))
+        );
+
+        List<ExportEntry> entries = patchLayoutService.plan(request, compileResult, packagingInfo);
+
+        // bug jar 模式的根目录必须使用真实 jar 文件夹名，不能退回模块名。
+        assertEquals(Path.of("/export/seeyon-comi-biz/classes/demo/Test.class"), entries.get(0).outputPath());
+    }
+
+    /**
+     * 验证 bug jar 模式不允许导出 web 资源。
+     */
+    @Test
+    void shouldRejectWebResourceWhenBugJarMode() {
+        SelectedItem selectedItem = new SelectedItem(
+                "cap-agent",
+                Path.of("/project/cap-agent"),
+                Path.of("/project/cap-agent/webapp/js/app.js"),
+                Path.of("js/app.js").toString(),
+                SourceType.WEB_RESOURCE
+        );
+        ExportRequest request = new ExportRequest(
+                ExportMode.BUG_JAR,
+                CompileMode.MAVEN_CURRENT_MODULE,
+                false,
+                Path.of("/export"),
+                List.of(selectedItem)
+        );
+        CompileResult compileResult = CompileResult.success(List.of("cap-agent"), Map.of("cap-agent", Path.of("/project/cap-agent/target/classes")));
+        Map<String, ModulePackagingInfo> packagingInfo = Map.of(
+                "cap-agent",
+                new ModulePackagingInfo("cap-agent", "cap-agent-jar", Path.of("/project/cap-agent/target/classes"))
+        );
+
+        // bug jar 只接受类文件，否则会生成错误的补丁结构。
+        assertThrows(ExportException.class, () -> patchLayoutService.plan(request, compileResult, packagingInfo));
+    }
+
+    /**
+     * 验证 IDEA 编译模式会使用真实输出目录，而不是固定 target/classes。
+     *
+     * @throws ExportException 规划失败
+     */
+    @Test
+    void shouldUseIdeaCompilerOutputDirectory() throws ExportException {
+        SelectedItem selectedItem = new SelectedItem(
+                "comi-biz",
+                Path.of("/project/comi-biz"),
+                Path.of("/project/comi-biz/src/main/java/demo/Test.java"),
+                Path.of("demo/Test.class").toString(),
+                SourceType.JAVA_SOURCE
+        );
+        ExportRequest request = new ExportRequest(
+                ExportMode.STANDARD_PATCH,
+                CompileMode.IDEA,
+                false,
+                Path.of("/export"),
+                List.of(selectedItem)
+        );
+        CompileResult compileResult = CompileResult.success(
+                List.of("comi-biz"),
+                Map.of("comi-biz", Path.of("/idea-out/production/comi-biz"))
+        );
+
+        List<ExportEntry> entries = patchLayoutService.plan(request, compileResult, Map.of());
+
+        // IDEA 编译模式必须使用 IDEA 的真实输出目录，否则会导出不到 class 文件。
+        assertEquals(Path.of("/idea-out/production/comi-biz/demo/Test.class"), entries.get(0).sourcePath());
+    }
+
+    /**
+     * 验证关闭编译后仍会使用现有 Maven 产物目录进行导出。
+     *
+     * @throws ExportException 规划失败
+     */
+    @Test
+    void shouldUseExistingArtifactsWhenCompileDisabled() throws ExportException {
+        SelectedItem selectedItem = new SelectedItem(
+                "comi-biz",
+                Path.of("/project/comi-biz"),
+                Path.of("/project/comi-biz/src/main/java/demo/Test.java"),
+                Path.of("demo/Test.class").toString(),
+                SourceType.JAVA_SOURCE
+        );
+        ExportRequest request = new ExportRequest(
+                ExportMode.STANDARD_PATCH,
+                CompileMode.MAVEN_CURRENT_MODULE,
+                true,
+                Path.of("/export"),
+                List.of(selectedItem)
+        );
+        CompileResult compileResult = CompileResult.success(
+                List.of("comi-biz"),
+                Map.of("comi-biz", Path.of("/project/comi-biz/target/classes")),
+                "已跳过编译，直接使用现有产物"
+        );
+
+        List<ExportEntry> entries = patchLayoutService.plan(request, compileResult, Map.of());
+
+        // 关闭编译开关后应直接使用现有 Maven 产物，不再触发编译逻辑。
+        assertEquals(Path.of("/project/comi-biz/target/classes/demo/Test.class"), entries.get(0).sourcePath());
+    }
+}

@@ -1,0 +1,37 @@
+<idea-plugin>
+    <id>com.seeyon.ideaexport</id>
+    <name>Idea Export Seeyon</name>
+    <vendor email="noreply@anthropic.com">AI.Coding</vendor>
+
+    <description><![CDATA[
+    用于导出 Seeyon 普通补丁和客户 bug jar 补丁的 IDEA 插件。
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+    <depends>Git4Idea</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+    </extensions>
+
+    <actions>
+        <action id="com.seeyon.ideaexport.ProjectViewExportAction"
+                class="com.seeyon.ideaexport.action.ProjectViewExportAction"
+                text="导出到 seeyon"
+                description="导出选中文件到 seeyon 补丁目录">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="com.seeyon.ideaexport.EditorExportAction"
+                class="com.seeyon.ideaexport.action.EditorExportAction"
+                text="导出到 seeyon"
+                description="导出当前编辑文件到 seeyon 补丁目录">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="com.seeyon.ideaexport.ChangesViewExportAction"
+                class="com.seeyon.ideaexport.action.ChangesViewExportAction"
+                text="导出到 seeyon"
+                description="导出 Git 变更文件到 seeyon 补丁目录">
+            <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
