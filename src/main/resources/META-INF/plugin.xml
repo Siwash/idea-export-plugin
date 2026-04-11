@@ -19,19 +19,25 @@
                 class="com.seeyon.ideaexport.action.ProjectViewExportAction"
                 text="导出到 seeyon"
                 description="导出选中文件到 seeyon 补丁目录">
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
         </action>
         <action id="com.seeyon.ideaexport.EditorExportAction"
                 class="com.seeyon.ideaexport.action.EditorExportAction"
                 text="导出到 seeyon"
                 description="导出当前编辑文件到 seeyon 补丁目录">
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
         </action>
         <action id="com.seeyon.ideaexport.ChangesViewExportAction"
                 class="com.seeyon.ideaexport.action.ChangesViewExportAction"
                 text="导出到 seeyon"
                 description="导出 Git 变更文件到 seeyon 补丁目录">
-            <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="ChangesViewPopupMenu" anchor="first"/>
+            <add-to-group group-id="Vcs.RepositoryChangesBrowserMenu" anchor="first"/>
+            <add-to-group group-id="Vcs.FileHistory.ContextMenu" relative-to-action="VcsHistoryActionsGroup" anchor="before"/>
+            <add-to-group group-id="VcsHistoryInternalGroup.Popup" anchor="first"/>
+            <add-to-group group-id="VcsHistoryInternalGroup.Toolbar" anchor="first"/>
+            <add-to-group group-id="Git.ContextMenu" anchor="first"/>
+            <add-to-group group-id="CutCopyPasteGroup" anchor="first"/>
         </action>
     </actions>
 </idea-plugin>

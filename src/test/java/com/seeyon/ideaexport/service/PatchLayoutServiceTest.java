@@ -29,12 +29,12 @@ class PatchLayoutServiceTest {
     private final PatchLayoutService patchLayoutService = new PatchLayoutService();
 
     /**
-     * 验证 Java 类文件会映射到 classes 目录。
+     * 验证普通 Java 类文件会映射到 seeyon/WEB-INF/classes 目录。
      *
      * @throws ExportException 规划失败
      */
     @Test
-    void shouldMapJavaSourceToClassesDirectory() throws ExportException {
+    void shouldMapJavaSourceToSeeyonWebInfClassesDirectory() throws ExportException {
         SelectedItem selectedItem = new SelectedItem(
                 "comi-biz",
                 Path.of("/project/comi-biz"),
@@ -56,8 +56,8 @@ class PatchLayoutServiceTest {
 
         List<ExportEntry> entries = patchLayoutService.plan(request, compileResult, Map.of());
 
-        // 普通 Java 类导出必须进入 classes，才能满足 Seeyon 补丁装载规则。
-        assertEquals(Path.of("/export/classes/demo/Test.class"), entries.get(0).outputPath());
+        // 普通 Java 类导出必须进入 seeyon/WEB-INF/classes，才能匹配正式环境类加载目录。
+        assertEquals(Path.of("/export/seeyon/WEB-INF/classes/demo/Test.class"), entries.get(0).outputPath());
         assertEquals(Path.of("/project/comi-biz/target/classes/demo/Test.class"), entries.get(0).sourcePath());
     }
 
@@ -92,12 +92,12 @@ class PatchLayoutServiceTest {
     }
 
     /**
-     * 验证 bug jar 模式会按 jar 文件夹名规划路径。
+     * 验证 bug jar 模式会映射到 seeyon/WEB-INF/lib/<jar名>.jar 下的包路径。
      *
      * @throws ExportException 规划失败
      */
     @Test
-    void shouldMapBugJarToJarFolderClassesDirectory() throws ExportException {
+    void shouldMapBugJarToSeeyonWebInfLibJarDirectory() throws ExportException {
         SelectedItem selectedItem = new SelectedItem(
                 "comi-biz",
                 Path.of("/project/comi-biz"),
@@ -123,8 +123,8 @@ class PatchLayoutServiceTest {
 
         List<ExportEntry> entries = patchLayoutService.plan(request, compileResult, packagingInfo);
 
-        // bug jar 模式的根目录必须使用真实 jar 文件夹名，不能退回模块名。
-        assertEquals(Path.of("/export/seeyon-comi-biz/classes/demo/Test.class"), entries.get(0).outputPath());
+        // bug jar 模式必须落到 seeyon/WEB-INF/lib/<jar名>.jar 下，并直接保留类的包路径。
+        assertEquals(Path.of("/export/seeyon/WEB-INF/lib/seeyon-comi-biz.jar/demo/Test.class"), entries.get(0).outputPath());
     }
 
     /**

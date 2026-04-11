@@ -1,5 +1,6 @@
 package com.seeyon.ideaexport.action;
 
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
@@ -55,6 +56,17 @@ public abstract class AbstractExportToSeeyonAction extends DumbAwareAction {
     public void update(@NotNull AnActionEvent event) {
         boolean visible = event.getProject() != null && isContextSupported(event);
         event.getPresentation().setEnabledAndVisible(visible);
+    }
+
+    /**
+     * 显式声明 Action 更新线程，兼容 IntelliJ 新版对 OLD_EDT 的废弃限制。
+     *
+     * @return 使用后台线程执行 update
+     */
+    @Override
+    public @NotNull ActionUpdateThread getActionUpdateThread() {
+        // 当前 update 只读取 DataKey，不依赖 Swing 组件状态，使用 BGT 可避免新版平台废弃告警。
+        return ActionUpdateThread.BGT;
     }
 
     /**

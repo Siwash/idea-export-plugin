@@ -54,7 +54,7 @@ public class SelectionResolver {
      */
     public List<SelectedItem> resolve(@NotNull Project project, @NotNull DataContext dataContext) throws ExportException {
         Map<String, SelectedItem> selectedItems = new LinkedHashMap<>();
-        for (VirtualFile virtualFile : collectVirtualFiles(dataContext)) {
+        for (VirtualFile virtualFile : expandVirtualFiles(collectVirtualFiles(dataContext))) {
             SelectedItem selectedItem = toSelectedItem(project, virtualFile);
             if (Objects.nonNull(selectedItem)) {
                 selectedItems.putIfAbsent(selectedItem.sourcePath().toString(), selectedItem);
@@ -117,6 +117,39 @@ public class SelectionResolver {
             virtualFiles.add(singleFile);
         }
         return List.copyOf(virtualFiles);
+    }
+
+    /**
+     * 把目录、包或项目根节点递归展开为文件集合，保证项目树可直接导出容器节点。
+     *
+     * @param virtualFiles 原始选中节点
+     * @return 展开后的文件列表
+     */
+    List<VirtualFile> expandVirtualFiles(List<VirtualFile> virtualFiles) {
+        Map<String, VirtualFile> expandedFiles = new LinkedHashMap<>();
+        for (VirtualFile virtualFile : virtualFiles) {
+            collectFilesRecursively(virtualFile, expandedFiles);
+        }
+        return List.copyOf(expandedFiles.values());
+    }
+
+    /**
+     * 递归收集目录下全部文件；文件本身直接加入，避免后续导出阶段再处理容器节点。
+     *
+     * @param virtualFile 当前节点
+     * @param expandedFiles 展开结果
+     */
+    private void collectFilesRecursively(VirtualFile virtualFile, Map<String, VirtualFile> expandedFiles) {
+        if (Objects.isNull(virtualFile)) {
+            return;
+        }
+        if (!virtualFile.isDirectory()) {
+            expandedFiles.putIfAbsent(virtualFile.getPath(), virtualFile);
+            return;
+        }
+        for (VirtualFile child : virtualFile.getChildren()) {
+            collectFilesRecursively(child, expandedFiles);
+        }
     }
 
     /**

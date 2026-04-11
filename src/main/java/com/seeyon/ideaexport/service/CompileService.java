@@ -3,6 +3,8 @@ package com.seeyon.ideaexport.service;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.compiler.CompileContext;
 import com.intellij.openapi.compiler.CompileScope;
+import com.intellij.openapi.compiler.CompilerMessage;
+import com.intellij.openapi.compiler.CompilerMessageCategory;
 import com.intellij.openapi.compiler.CompilerManager;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
@@ -99,7 +101,7 @@ public class CompileService {
             if (!Files.exists(pomPath)) {
                 throw new ExportException("当前工程不是 Maven 模块，无法执行默认编译: " + moduleBasePath);
             }
-            ProcessBuilder processBuilder = new ProcessBuilder("mvn", "-f", pomPath.toString(), "-DskipTests", "compile");
+            ProcessBuilder processBuilder = createMavenProcessBuilder(pomPath);
             processBuilder.directory(modulePath.toFile());
             processBuilder.redirectErrorStream(true);
             String output = executeProcess(processBuilder);
@@ -152,7 +154,7 @@ public class CompileService {
             throw new ExportException("IDEA 编译未返回结果");
         }
         if (errorCountHolder.get() > 0) {
-            throw new ExportException("IDEA 编译失败\n" + summarizeIdeaMessages(String.valueOf(compileContext), errorCountHolder.get()));
+            throw new ExportException("IDEA 编译失败\n" + summarizeIdeaMessages(compileContext, errorCountHolder.get()));
         }
 
         Map<String, Path> outputDirectories = new LinkedHashMap<>();
@@ -190,7 +192,7 @@ public class CompileService {
             }
             return output + System.lineSeparator() + "__EXIT_CODE__=" + exitCode;
         } catch (IOException exception) {
-            throw new ExportException("启动 Maven 编译失败，请确认 mvn 已加入 PATH", exception);
+            throw new ExportException("启动 Maven 编译失败，请确认系统可执行 cmd /c mvn -v，并在 IDEA 启动后可继承该环境变量", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new ExportException("Maven 编译被中断", exception);
@@ -228,19 +230,69 @@ public class CompileService {
     }
 
     /**
-     * 汇总 IDEA 编译失败摘要，至少明确错误数并引导用户查看 Build 窗口。
+     * 汇总 IDEA 编译失败摘要，优先提取真实编译错误文本，避免只显示状态占位符。
      *
      * @param compileContext 编译上下文
      * @param errorCount 错误数
      * @return 可读错误摘要
      */
-    String summarizeIdeaMessages(String contextText, int errorCount) {
-        String normalizedText = Objects.nonNull(contextText) ? contextText.trim() : "";
-        if (!normalizedText.isBlank()) {
-            // 有上下文文本时优先返回，避免仍退化成只有错误数。
-            return normalizedText;
+    String summarizeIdeaMessages(CompileContext compileContext, int errorCount) {
+        String messageSummary = summarizeCompilerMessages(compileContext);
+        if (!messageSummary.isBlank()) {
+            // 能拿到真实编译错误时必须优先展示，不能退化成 compileContext 的状态字符串。
+            return messageSummary;
+        }
+        String contextText = Objects.nonNull(compileContext) ? String.valueOf(compileContext).trim() : "";
+        if (!contextText.isBlank() && !contextText.contains("COMPILE_SERVER_BUILD_STATUS")) {
+            return contextText;
         }
         return "错误数: " + errorCount + System.lineSeparator() + "请查看 IDEA Build 窗口中的详细编译错误信息";
+    }
+
+    /**
+     * 从 IDEA 编译上下文中抽取错误级消息，拼成面向用户的摘要文本。
+     *
+     * @param compileContext 编译上下文
+     * @return 错误摘要
+     */
+    String summarizeCompilerMessages(CompileContext compileContext) {
+        if (Objects.isNull(compileContext)) {
+            return "";
+        }
+        CompilerMessage[] errorMessages = compileContext.getMessages(CompilerMessageCategory.ERROR);
+        List<String> lines = new ArrayList<>();
+        for (CompilerMessage message : errorMessages) {
+            if (Objects.isNull(message)) {
+                continue;
+            }
+            StringBuilder lineBuilder = new StringBuilder();
+            VirtualFile virtualFile = message.getVirtualFile();
+            if (Objects.nonNull(virtualFile)) {
+                // 这里优先取稳定的文件路径，避免不同 VirtualFile 实现的展示文案不一致。
+                lineBuilder.append(virtualFile.getPath()).append(" - ");
+            }
+            String messageText = Objects.nonNull(message.getMessage()) ? message.getMessage().trim() : "";
+            if (messageText.isBlank()) {
+                continue;
+            }
+            lineBuilder.append(messageText);
+            lines.add(lineBuilder.toString());
+            if (lines.size() >= 10) {
+                // 错误太多时只取前十条，避免通知窗口被海量日志淹没。
+                break;
+            }
+        }
+        return String.join(System.lineSeparator(), lines);
+    }
+
+    /**
+     * 在 Windows 下通过 cmd 启动 Maven，保证能解析 mvn.cmd/bat 等命令包装器。
+     *
+     * @param pomPath 模块 pom 路径
+     * @return Maven 进程构建器
+     */
+    ProcessBuilder createMavenProcessBuilder(Path pomPath) {
+        return new ProcessBuilder("cmd", "/c", "mvn", "-f", pomPath.toString(), "-DskipTests", "compile");
     }
 
     /**

@@ -102,13 +102,14 @@ public class PatchLayoutService {
      * @throws ExportException 文件类型不支持时抛出
      */
     private Path resolveStandardOutputPath(Path targetPath, SelectedItem selectedItem) throws ExportException {
+        Path seeyonRoot = targetPath.resolve("seeyon");
         if (selectedItem.isJavaSource()) {
-            // Java 源码固定导出到 classes 下，保持补丁目录结构稳定。
-            return targetPath.resolve("classes").resolve(selectedItem.relativePath());
+            // 普通类补丁必须落到 seeyon/WEB-INF/classes，才能匹配正式环境类加载目录。
+            return seeyonRoot.resolve("WEB-INF").resolve("classes").resolve(selectedItem.relativePath());
         }
         if (selectedItem.isWebResource()) {
-            // webapp 资源固定映射到 /seeyon，满足 Seeyon 补丁目录约定。
-            return targetPath.resolve("seeyon").resolve(selectedItem.relativePath());
+            // webapp 资源继续直接映射到 seeyon 根下，保持与正式目录结构一致。
+            return seeyonRoot.resolve(selectedItem.relativePath());
         }
         throw new ExportException("不支持的文件类型: " + selectedItem.sourcePath());
     }
@@ -130,6 +131,11 @@ public class PatchLayoutService {
         if (!selectedItem.isJavaSource()) {
             throw new ExportException("bug jar 模式仅支持类文件导出: " + selectedItem.sourcePath());
         }
-        return targetPath.resolve(modulePackagingInfo.finalName()).resolve("classes").resolve(selectedItem.relativePath());
+        // bug jar 补丁必须放到 seeyon/WEB-INF/lib/<jar目录> 下，并直接保留类的包路径。
+        return targetPath.resolve("seeyon")
+                .resolve("WEB-INF")
+                .resolve("lib")
+                .resolve(modulePackagingInfo.jarDirectoryName())
+                .resolve(selectedItem.relativePath());
     }
 }

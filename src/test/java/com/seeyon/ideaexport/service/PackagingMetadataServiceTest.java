@@ -31,7 +31,7 @@ class PackagingMetadataServiceTest {
     Path tempDir;
 
     /**
-     * 验证优先使用 finalName 作为 bug jar 目录名。
+     * 验证优先使用 finalName 作为 bug jar 基础名，并统一补 .jar 后缀。
      *
      * @throws Exception 测试失败
      */
@@ -50,8 +50,9 @@ class PackagingMetadataServiceTest {
 
         Map<String, ModulePackagingInfo> packagingInfo = packagingMetadataService.resolvePackaging(List.of(selectedItem));
 
-        // 用户要求目录名与真实 jar 名一致，所以 finalName 必须优先级最高。
+        // 用户要求目录名表现成真实 jar 名，因此 finalName 必须优先级最高并可补齐 .jar 后缀。
         assertEquals("demo-final-name", packagingInfo.get("demo-module").finalName());
+        assertEquals("demo-final-name.jar", packagingInfo.get("demo-module").jarDirectoryName());
     }
 
     /**
@@ -73,6 +74,7 @@ class PackagingMetadataServiceTest {
 
         // 没有 finalName 时用 artifactId，至少保证 bug jar 模式仍可工作。
         assertEquals("demo-artifact", packagingInfo.get("demo-module").finalName());
+        assertEquals("demo-artifact.jar", packagingInfo.get("demo-module").jarDirectoryName());
     }
 
     /**
