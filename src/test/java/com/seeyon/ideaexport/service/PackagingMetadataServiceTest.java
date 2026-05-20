@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Maven 打包元数据解析测试，验证 finalName 与 artifactId 的提取逻辑。
+ * Maven 打包元数据解析测试，验证 artifactId 的提取与 seeyon jar 命名逻辑。
  *
  * @Author by AI.Coding
  * @Date 2026-04-11
@@ -31,18 +31,18 @@ class PackagingMetadataServiceTest {
     Path tempDir;
 
     /**
-     * 验证优先使用 finalName 作为 bug jar 基础名，并统一补 .jar 后缀。
+     * 验证 bug jar 始终使用 artifactId，并补齐 seeyon 前缀和 .jar 后缀。
      *
      * @throws Exception 测试失败
      */
     @Test
-    void shouldPreferFinalNameFromPom() throws Exception {
+    void shouldUseArtifactIdWithSeeyonJarName() throws Exception {
         Path moduleDirectory = createModuleWithPom("""
                 <project>
                     <modelVersion>4.0.0</modelVersion>
-                    <artifactId>demo-artifact</artifactId>
+                    <artifactId>ctp-workflow-component</artifactId>
                     <build>
-                        <finalName>demo-final-name</finalName>
+                        <finalName>wrong-final-name</finalName>
                     </build>
                 </project>
                 """);
@@ -50,31 +50,30 @@ class PackagingMetadataServiceTest {
 
         Map<String, ModulePackagingInfo> packagingInfo = packagingMetadataService.resolvePackaging(List.of(selectedItem));
 
-        // 用户要求目录名表现成真实 jar 名，因此 finalName 必须优先级最高并可补齐 .jar 后缀。
-        assertEquals("demo-final-name", packagingInfo.get("demo-module").finalName());
-        assertEquals("demo-final-name.jar", packagingInfo.get("demo-module").jarDirectoryName());
+        // bug jar 规范要求读取当前工程 artifactId，并统一生成 seeyon-<artifactId>.jar。
+        assertEquals("ctp-workflow-component", packagingInfo.get("demo-module").artifactId());
+        assertEquals("seeyon-ctp-workflow-component.jar", packagingInfo.get("demo-module").jarDirectoryName());
     }
 
     /**
-     * 验证 finalName 缺失时回退 artifactId。
+     * 验证已带 seeyon 前缀的 artifactId 不会重复添加前缀。
      *
      * @throws Exception 测试失败
      */
     @Test
-    void shouldFallbackToArtifactIdWhenFinalNameMissing() throws Exception {
+    void shouldNotDuplicateSeeyonPrefix() throws Exception {
         Path moduleDirectory = createModuleWithPom("""
                 <project>
                     <modelVersion>4.0.0</modelVersion>
-                    <artifactId>demo-artifact</artifactId>
+                    <artifactId>seeyon-cap-agent</artifactId>
                 </project>
                 """);
         SelectedItem selectedItem = buildSelectedItem(moduleDirectory);
 
         Map<String, ModulePackagingInfo> packagingInfo = packagingMetadataService.resolvePackaging(List.of(selectedItem));
 
-        // 没有 finalName 时用 artifactId，至少保证 bug jar 模式仍可工作。
-        assertEquals("demo-artifact", packagingInfo.get("demo-module").finalName());
-        assertEquals("demo-artifact.jar", packagingInfo.get("demo-module").jarDirectoryName());
+        // artifactId 已符合 seeyon 命名时只补 jar 后缀，避免生成 seeyon-seeyon-*。
+        assertEquals("seeyon-cap-agent.jar", packagingInfo.get("demo-module").jarDirectoryName());
     }
 
     /**
@@ -100,7 +99,8 @@ class PackagingMetadataServiceTest {
         Map<String, ModulePackagingInfo> packagingInfo = packagingMetadataService.resolvePackaging(List.of(selectedItem));
 
         // 目录名必须来自当前模块，而不是 parent。
-        assertEquals("child-artifact", packagingInfo.get("demo-module").finalName());
+        assertEquals("child-artifact", packagingInfo.get("demo-module").artifactId());
+        assertEquals("seeyon-child-artifact.jar", packagingInfo.get("demo-module").jarDirectoryName());
     }
 
     /**
@@ -113,8 +113,29 @@ class PackagingMetadataServiceTest {
                 tempDir.resolve("missing-module"),
                 tempDir.resolve("missing-module/src/main/java/demo/Test.java"),
                 "demo/Test.class",
+                "src/main/java/demo/Test.java",
                 SourceType.JAVA_SOURCE
         );
+
+        assertThrows(ExportException.class, () -> packagingMetadataService.resolvePackaging(List.of(selectedItem)));
+    }
+
+    /**
+     * 验证 artifactId 缺失时直接失败，避免生成错误 jar 名。
+     *
+     * @throws Exception 测试失败
+     */
+    @Test
+    void shouldFailWhenArtifactIdMissing() throws Exception {
+        Path moduleDirectory = createModuleWithPom("""
+                <project>
+                    <modelVersion>4.0.0</modelVersion>
+                    <build>
+                        <finalName>wrong-final-name</finalName>
+                    </build>
+                </project>
+                """);
+        SelectedItem selectedItem = buildSelectedItem(moduleDirectory);
 
         assertThrows(ExportException.class, () -> packagingMetadataService.resolvePackaging(List.of(selectedItem)));
     }
@@ -131,6 +152,7 @@ class PackagingMetadataServiceTest {
                 moduleDirectory,
                 moduleDirectory.resolve("src/main/java/demo/Test.java"),
                 "demo/Test.class",
+                "src/main/java/demo/Test.java",
                 SourceType.JAVA_SOURCE
         );
     }

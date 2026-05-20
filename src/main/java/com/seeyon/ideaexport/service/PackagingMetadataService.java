@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Maven 打包元数据解析服务，负责为 bug jar 模式提供模块最终 jar 名。
+ * Maven 打包元数据解析服务，负责为 bug jar 模式提供模块 artifactId。
  *
  * @Author by AI.Coding
  * @Date 2026-04-11
@@ -50,7 +50,7 @@ public class PackagingMetadataService {
     }
 
     /**
-     * 解析单个模块的打包信息，优先使用 project/build/finalName，缺失时回退 project/artifactId。
+     * 解析单个模块的打包信息，只读取 project/artifactId 作为 bug jar 命名来源。
      *
      * @param item 选中项
      * @return 模块打包信息
@@ -65,17 +65,13 @@ public class PackagingMetadataService {
         Document document = parsePomDocument(pomPath);
         Element projectElement = document.getDocumentElement();
         String artifactId = readDirectChildText(projectElement, "artifactId");
-        String finalName = readBuildFinalName(projectElement);
-        if (finalName.isBlank()) {
-            finalName = artifactId;
-        }
-        if (finalName.isBlank()) {
-            throw new ExportException("模块缺少 finalName/artifactId，无法确定 bug jar 名: " + item.moduleName());
+        if (artifactId.isBlank()) {
+            throw new ExportException("模块缺少 artifactId，无法确定 bug jar 名: " + item.moduleName());
         }
 
-        // bug jar 目录名必须来自当前模块真实构建元数据，而不是全文首个匹配值。
+        // bug jar 目录必须跟随当前工程 artifactId，不能使用 finalName 或 parent artifactId。
         Path classesOutputDirectory = item.moduleBasePath().resolve("target").resolve("classes");
-        return new ModulePackagingInfo(item.moduleName(), finalName, classesOutputDirectory);
+        return new ModulePackagingInfo(item.moduleName(), artifactId, classesOutputDirectory);
     }
 
     /**
@@ -97,29 +93,6 @@ public class PackagingMetadataService {
         } catch (IOException | ParserConfigurationException | SAXException exception) {
             throw new ExportException("解析 pom.xml 失败: " + pomPath, exception);
         }
-    }
-
-    /**
-     * 读取 project/build/finalName，避免误取到插件或 profile 下的同名节点。
-     *
-     * @param projectElement project 根节点
-     * @return finalName，缺失时返回空字符串
-     */
-    private String readBuildFinalName(Element projectElement) {
-        NodeList buildNodes = projectElement.getElementsByTagName("build");
-        if (buildNodes.getLength() == 0) {
-            return "";
-        }
-        for (int index = 0; index < buildNodes.getLength(); index++) {
-            if (!(buildNodes.item(index) instanceof Element buildElement)) {
-                continue;
-            }
-            if (buildElement.getParentNode() != projectElement) {
-                continue;
-            }
-            return readDirectChildText(buildElement, "finalName");
-        }
-        return "";
     }
 
     /**

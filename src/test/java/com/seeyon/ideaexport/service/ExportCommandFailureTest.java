@@ -81,7 +81,7 @@ class ExportCommandFailureTest {
          * 成功通知在本测试中不需要处理。
          */
         @Override
-        public void notifyResult(Project project, ExportSummary summary, com.seeyon.ideaexport.model.CompileResult compileResult, Path targetPath) {
+        public void notifyResult(Project project, ExportSummary summary, com.seeyon.ideaexport.model.CompileResult compileResult, Path targetPath, com.seeyon.ideaexport.model.ExportMode mode, BufferedExportRuntimeReporter reporter) {
             // 本测试仅关注错误通知。
         }
     }

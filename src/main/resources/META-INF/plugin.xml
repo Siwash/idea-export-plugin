@@ -39,5 +39,12 @@
             <add-to-group group-id="Git.ContextMenu" anchor="first"/>
             <add-to-group group-id="CutCopyPasteGroup" anchor="first"/>
         </action>
+        <action id="com.seeyon.ideaexport.HotDeployAction"
+                class="com.seeyon.ideaexport.action.HotDeployAction"
+                text="Maven 编译并热部署"
+                description="Maven 编译当前文件并热部署到活跃 Debug 会话">
+            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="com.seeyon.ideaexport.EditorExportAction"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="com.seeyon.ideaexport.ProjectViewExportAction"/>
+        </action>
     </actions>
 </idea-plugin>

@@ -105,6 +105,10 @@ public class ExportCommandService {
     private void validateTargetPath(ExportRequest request) throws ExportException {
         try {
             Files.createDirectories(request.targetPath());
+            if (!Files.isWritable(request.targetPath())) {
+                // 目标目录已存在但不可写时必须在编译前终止，避免白跑一轮导出流程。
+                throw new ExportException("导出路径不可写: " + request.targetPath());
+            }
         } catch (IOException exception) {
             throw new ExportException("导出路径不可写: " + request.targetPath(), exception);
         }
@@ -117,17 +121,18 @@ public class ExportCommandService {
      * @param request 导出请求
      */
     protected void dispatchExport(Project project, ExportRequest request) {
+        BufferedExportRuntimeReporter reporter = new BufferedExportRuntimeReporter();
         ProgressManager.getInstance().run(new Task.Backgroundable(project, "导出到 seeyon", false) {
             /**
-             * 在后台执行实际导出流程。
+             * 使用 IDEA 原生后台进度执行导出，避免自定义过程对话框与编译线程约束互相卡住。
              *
              * @param indicator 进度指示器
              */
             @Override
             public void run(ProgressIndicator indicator) {
-                // 导出可能触发编译和批量复制，必须放到后台避免阻塞 IDE 前台交互。
-                indicator.setText("正在导出到 seeyon");
-                executeExport(project, request);
+                reporter.started("导出到 seeyon", 3);
+                indicator.setText("准备开始导出...");
+                executeExport(project, request, new ProgressAwareRuntimeReporter(reporter, indicator));
             }
         });
     }
@@ -139,17 +144,51 @@ public class ExportCommandService {
      * @param request 导出请求
      */
     protected void executeExport(Project project, ExportRequest request) {
+        executeExport(project, request, new SilentExportRuntimeReporter());
+    }
+
+    /**
+     * 执行带过程上报的导出主流程，便于过程窗口与测试场景共享同一套业务链路。
+     *
+     * @param project 当前项目
+     * @param request 导出请求
+     * @param reporter 过程上报器
+     */
+    protected void executeExport(Project project, ExportRequest request, ExportRuntimeReporter reporter) {
         try {
-            CompileResult compileResult = compileService.compile(project, request);
+            reporter.updateStage("准备编译与导出任务...");
+            reporter.updateProgress(0.1D);
+            CompileResult compileResult = compileService.compile(project, request, reporter);
             Map<String, ModulePackagingInfo> packagingInfo = request.mode() == ExportMode.BUG_JAR
                     ? packagingMetadataService.resolvePackaging(request.selectedItems())
                     : Map.of();
+            reporter.updateStage("正在规划导出路径...");
+            reporter.updateProgress(0.45D);
             List<ExportEntry> entries = patchLayoutService.plan(request, compileResult, packagingInfo);
-            ExportSummary exportSummary = fileExportService.export(entries);
+            reporter.updateStage("正在复制导出文件...");
+            reporter.updateProgress(0.7D);
+            ExportSummary exportSummary = fileExportService.export(entries, reporter);
             recentPathStore.record(request.targetPath().toString());
-            notificationService.notifyResult(project, exportSummary, compileResult, request.targetPath());
+            reporter.updateProgress(1D);
+            reporter.finished();
+            notificationService.notifyResult(project, exportSummary, compileResult, request.targetPath(), request.mode(), resolveBufferedReporter(reporter));
         } catch (ExportException | IOException exception) {
-            notificationService.notifyError(project, exception.getMessage());
+            reporter.appendLog(exception.getMessage());
+            reporter.finished();
+            if (exception instanceof ExportException exportException && exportException.getSourcePath() != null) {
+                notificationService.notifyError(
+                        project,
+                        exception.getMessage(),
+                        request.targetPath(),
+                        request.mode(),
+                        exportException.getSourcePath(),
+                        exportException.getLine(),
+                        exportException.getColumn(),
+                        resolveBufferedReporter(reporter)
+                );
+                return;
+            }
+            notificationService.notifyError(project, exception.getMessage(), request.targetPath(), request.mode(), null, resolveBufferedReporter(reporter));
         }
     }
 
@@ -164,5 +203,21 @@ public class ExportCommandService {
     protected java.util.Optional<ExportRequest> createExportRequest(Project project, List<SelectedItem> selectedItems, List<String> recentPaths) {
         ExportDialog exportDialog = new ExportDialog(project, selectedItems, recentPaths);
         return exportDialog.showAndGetRequest();
+    }
+
+    /**
+     * 把通用上报器还原成缓冲上报器，供结果窗口读取过程摘要。
+     *
+     * @param reporter 通用上报器
+     * @return 缓冲上报器
+     */
+    private BufferedExportRuntimeReporter resolveBufferedReporter(ExportRuntimeReporter reporter) {
+        if (reporter instanceof ProgressAwareRuntimeReporter progressAwareRuntimeReporter) {
+            return progressAwareRuntimeReporter.getDelegate();
+        }
+        if (reporter instanceof BufferedExportRuntimeReporter bufferedExportRuntimeReporter) {
+            return bufferedExportRuntimeReporter;
+        }
+        return new BufferedExportRuntimeReporter();
     }
 }

@@ -46,6 +46,23 @@ class FileExportServiceTest {
     }
 
     /**
+     * 验证源码模式下的普通文本文件会按普通文件复制，不触发 class 相关补齐逻辑。
+     *
+     * @throws Exception 测试失败
+     */
+    @Test
+    void shouldCopySourceFileWithoutExpandingClassSiblings() throws Exception {
+        Path sourceFile = createFile(tempDir.resolve("source/readme.md"), "hello-source");
+        ExportEntry entry = ExportEntry.pending("demo", sourceFile, tempDir.resolve("output/source/demo/readme.md"));
+
+        ExportSummary summary = fileExportService.export(List.of(entry));
+
+        // 源码导出复制的是原始文件，不能因为同目录里有其他文件就错误触发 class 补齐逻辑。
+        assertEquals(1, summary.successCount());
+        assertEquals("hello-source", Files.readString(tempDir.resolve("output/source/demo/readme.md"), StandardCharsets.UTF_8));
+    }
+
+    /**
      * 验证 class 文件导出时会一并带出内部类文件。
      *
      * @throws Exception 测试失败

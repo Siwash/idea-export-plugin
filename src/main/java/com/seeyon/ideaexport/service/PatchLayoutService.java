@@ -56,14 +56,19 @@ public class PatchLayoutService {
      * @throws ExportException 当前文件无法映射时抛出
      */
     private ExportEntry planSingle(ExportRequest request, CompileResult compileResult, Map<String, ModulePackagingInfo> packagingInfo, SelectedItem selectedItem) throws ExportException {
+        if (request.mode().isSourceExport()) {
+            return planSourceExportEntry(request, selectedItem);
+        }
         if (selectedItem.sourceType() == SourceType.UNSUPPORTED) {
-            // 不支持类型在规划阶段直接标记跳过，避免整个导出流程因此中断。
+            // 不支持类型在补丁规划阶段直接标记跳过，避免整个导出流程因此中断。
             return new ExportEntry(
                     selectedItem.moduleName(),
                     selectedItem.sourcePath(),
                     request.targetPath().resolve(selectedItem.relativePath()),
                     ExportEntryStatus.SKIPPED,
-                    "不支持的文件类型: " + selectedItem.sourcePath()
+                    "不支持的文件类型: " + selectedItem.sourcePath(),
+                    -1,
+                    -1
             );
         }
         Path exportSourcePath = resolveExportSourcePath(selectedItem, compileResult);
@@ -71,6 +76,22 @@ public class PatchLayoutService {
                 ? resolveBugJarOutputPath(request.targetPath(), selectedItem, packagingInfo)
                 : resolveStandardOutputPath(request.targetPath(), selectedItem);
         return ExportEntry.pending(selectedItem.moduleName(), exportSourcePath, outputPath);
+    }
+
+    /**
+     * 规划源码导出条目，直接复制原始文件到 source/模块名/模块相对路径。
+     *
+     * @param request 导出请求
+     * @param selectedItem 选中项
+     * @return 导出项
+     */
+    private ExportEntry planSourceExportEntry(ExportRequest request, SelectedItem selectedItem) {
+        Path outputPath = request.targetPath()
+                .resolve("source")
+                .resolve(selectedItem.moduleName())
+                .resolve(selectedItem.moduleRelativePath());
+        // 源码模式不再依赖编译输出目录，所有文件都直接复制原始源文件。
+        return ExportEntry.pending(selectedItem.moduleName(), selectedItem.sourcePath(), outputPath);
     }
 
     /**

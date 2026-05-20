@@ -14,7 +14,9 @@ public record ExportEntry(
         Path sourcePath,
         Path outputPath,
         ExportEntryStatus status,
-        String message
+        String message,
+        int line,
+        int column
 ) {
 
     /**
@@ -22,7 +24,6 @@ public record ExportEntry(
      */
     public ExportEntry {
         Objects.requireNonNull(moduleName, "moduleName cannot be null");
-        Objects.requireNonNull(sourcePath, "sourcePath cannot be null");
         Objects.requireNonNull(outputPath, "outputPath cannot be null");
         Objects.requireNonNull(status, "status cannot be null");
     }
@@ -37,7 +38,7 @@ public record ExportEntry(
      */
     public static ExportEntry pending(String moduleName, Path sourcePath, Path outputPath) {
         // 导出计划阶段统一使用 PENDING，执行完成后再替换真实状态。
-        return new ExportEntry(moduleName, sourcePath, outputPath, ExportEntryStatus.PENDING, "");
+        return new ExportEntry(moduleName, sourcePath, outputPath, ExportEntryStatus.PENDING, "", -1, -1);
     }
 
     /**
@@ -48,6 +49,17 @@ public record ExportEntry(
      * @return 新导出项
      */
     public ExportEntry withStatus(ExportEntryStatus nextStatus, String nextMessage) {
-        return new ExportEntry(moduleName, sourcePath, outputPath, nextStatus, nextMessage);
+        return new ExportEntry(moduleName, sourcePath, outputPath, nextStatus, nextMessage, line, column);
+    }
+
+    /**
+     * 基于现有导出项补充失败定位信息。
+     *
+     * @param nextLine 行号
+     * @param nextColumn 列号
+     * @return 带定位信息的新导出项
+     */
+    public ExportEntry withLocation(int nextLine, int nextColumn) {
+        return new ExportEntry(moduleName, sourcePath, outputPath, status, message, nextLine, nextColumn);
     }
 }

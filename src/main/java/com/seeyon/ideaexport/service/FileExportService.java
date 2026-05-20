@@ -29,6 +29,18 @@ public class FileExportService {
      * @throws ExportException 导出计划为空时抛出
      */
     public ExportSummary export(List<ExportEntry> entries) throws ExportException {
+        return export(entries, new SilentExportRuntimeReporter());
+    }
+
+    /**
+     * 执行导出计划并上报复制阶段进度。
+     *
+     * @param entries 导出计划
+     * @param reporter 过程上报器
+     * @return 导出结果汇总
+     * @throws ExportException 导出计划为空时抛出
+     */
+    public ExportSummary export(List<ExportEntry> entries, ExportRuntimeReporter reporter) throws ExportException {
         Objects.requireNonNull(entries, "entries cannot be null");
         if (entries.isEmpty()) {
             throw new ExportException("没有可执行的导出项");
@@ -38,8 +50,12 @@ public class FileExportService {
         int successCount = 0;
         int failedCount = 0;
         int skippedCount = 0;
+        int entryIndex = 0;
 
         for (ExportEntry entry : entries) {
+            entryIndex++;
+            reporter.updateProgress(0.7D + (0.25D * entryIndex / Math.max(entries.size(), 1)));
+            reporter.appendLog("[EXPORT] " + entry.outputPath());
             List<ExportEntry> exportedEntries = exportSingle(entry);
             for (ExportEntry exportedEntry : exportedEntries) {
                 finalEntries.add(exportedEntry);
@@ -123,9 +139,9 @@ public class FileExportService {
         try {
             Files.createDirectories(outputPath.getParent());
             Files.copy(sourcePath, outputPath, StandardCopyOption.REPLACE_EXISTING);
-            return new ExportEntry(prototype.moduleName(), sourcePath, outputPath, ExportEntryStatus.EXPORTED, "导出成功");
+            return new ExportEntry(prototype.moduleName(), sourcePath, outputPath, ExportEntryStatus.EXPORTED, "导出成功", -1, -1);
         } catch (IOException exception) {
-            return new ExportEntry(prototype.moduleName(), sourcePath, outputPath, ExportEntryStatus.FAILED, exception.getMessage());
+            return new ExportEntry(prototype.moduleName(), sourcePath, outputPath, ExportEntryStatus.FAILED, exception.getMessage(), -1, -1);
         }
     }
 }

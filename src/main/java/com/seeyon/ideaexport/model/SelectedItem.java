@@ -14,6 +14,7 @@ public record SelectedItem(
         Path moduleBasePath,
         Path sourcePath,
         String relativePath,
+        String moduleRelativePath,
         SourceType sourceType
 ) {
 
@@ -25,6 +26,7 @@ public record SelectedItem(
         Objects.requireNonNull(moduleBasePath, "moduleBasePath cannot be null");
         Objects.requireNonNull(sourcePath, "sourcePath cannot be null");
         Objects.requireNonNull(relativePath, "relativePath cannot be null");
+        Objects.requireNonNull(moduleRelativePath, "moduleRelativePath cannot be null");
         Objects.requireNonNull(sourceType, "sourceType cannot be null");
     }
 

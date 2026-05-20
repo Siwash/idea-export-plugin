@@ -7,6 +7,7 @@ import com.seeyon.ideaexport.exception.ExportException;
 import com.seeyon.ideaexport.model.SourceType;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,6 +53,22 @@ class SelectionResolverTest {
 
         // Java 源码必须转成 .class，相对路径才可直接拼接到 classes 目录。
         assertEquals("com/seeyon/Test.class", relativePath);
+    }
+
+    /**
+     * 验证源码导出会保留相对模块根目录的原始层级。
+     *
+     * @throws ExportException 路径转换失败
+     */
+    @Test
+    void shouldBuildModuleRelativePathForSourceExport() throws ExportException {
+        String moduleRelativePath = selectionResolver.buildModuleRelativePath(
+                "/project/demo/src/main/java/com/seeyon/Test.java",
+                Path.of("/project/demo")
+        );
+
+        // 源码导出不能再把 Java 文件转换成 .class，必须保留模块根目录之后的原始路径。
+        assertEquals("src/main/java/com/seeyon/Test.java", moduleRelativePath);
     }
 
     /**

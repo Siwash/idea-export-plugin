@@ -183,11 +183,13 @@ public class SelectionResolver {
         String normalizedPath = normalizeSeparators(virtualFile.getPath());
         SourceType sourceType = detectSourceType(normalizedPath);
         String relativeOutputPath = buildRelativeOutputPath(normalizedPath, virtualFile.getName(), sourceType);
+        String moduleRelativePath = buildModuleRelativePath(normalizedPath, moduleBasePath);
         return new SelectedItem(
                 module.getName(),
                 moduleBasePath,
                 Path.of(normalizedPath),
                 relativeOutputPath,
+                moduleRelativePath,
                 sourceType
         );
     }
@@ -241,6 +243,27 @@ public class SelectionResolver {
             return virtualFile;
         }
         return LocalFileSystem.getInstance().findFileByPath(filePath.getPath());
+    }
+
+    /**
+     * 计算模块根目录相对路径，供源码导出模式直接复用原始目录层级。
+     *
+     * @param normalizedPath 归一化后的文件绝对路径
+     * @param moduleBasePath 模块根目录
+     * @return 相对模块根目录的路径
+     * @throws ExportException 文件不在模块根目录内时抛出
+     */
+    String buildModuleRelativePath(String normalizedPath, Path moduleBasePath) throws ExportException {
+        String normalizedModuleBasePath = normalizeSeparators(moduleBasePath.toString());
+        if (Objects.equals(normalizedPath, normalizedModuleBasePath)) {
+            throw new ExportException("无法为模块根目录本身生成源码导出路径: " + normalizedPath);
+        }
+        String prefix = normalizedModuleBasePath.endsWith("/") ? normalizedModuleBasePath : normalizedModuleBasePath + "/";
+        if (!normalizedPath.startsWith(prefix)) {
+            throw new ExportException("文件不在模块根目录内，无法生成源码导出路径: " + normalizedPath);
+        }
+        // 源码模式必须保留模块根目录之后的原始层级，避免再套用补丁专属的 .class / webapp 规则。
+        return normalizedPath.substring(prefix.length());
     }
 
     /**
